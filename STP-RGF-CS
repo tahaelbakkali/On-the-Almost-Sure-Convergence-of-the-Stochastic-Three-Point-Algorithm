@@ -1,0 +1,184 @@
+import numpy as np
+from scipy.optimize import minimize
+import time
+import matplotlib.pyplot as plt
+import random
+
+dimension = 3
+somme = 20
+initial_theta = np.random.randn(dimension)  
+
+alpha = [np.random.uniform(-5, 5) for i in range(somme)]
+X = [np.random.uniform(-5, 5, dimension) for i in range(somme)]
+
+def f(w):
+    return sum([np.log(1 + np.exp(-alpha[i] * np.dot(X[i], w))) for i in range(somme)])
+
+f_star=f(minimize(f, initial_theta).x)
+
+alpha_k = 1 / (50*(4 * dimension + 4))
+mu_k = 10**-4
+
+def RGF_update(x_k, s_k, f):
+    numerator = f(x_k + mu_k * s_k) - f(x_k)
+    x_k_plus_1 = x_k - alpha_k * (numerator / mu_k) * s_k
+    return x_k_plus_1
+
+def random_vector_in_unit_ball(dimension):
+    vec = np.random.uniform(-1, 1, dimension)
+    norm = np.linalg.norm(vec)
+    return vec / norm if norm != 0 else vec
+
+def RGF(initial_theta):
+    iter = 0
+    #thetastar = minimize(f, initial_theta).x
+    x_k = initial_theta
+    start_time = time.time()
+    traj = []
+    for t in range(2, iterations):
+        iter += 1
+        x_k = RGF_update(x_k, random_vector_in_unit_ball(dimension), f)
+        diff = f(x_k) - f_star
+        traj.append(diff)
+        if diff < eps:
+            return [time.time() - start_time, iter, traj]
+    return [time.time() - start_time, iter, traj]
+
+def DDS(x0):
+    n = len(x0)
+    x = x0
+    delta = delta_0
+    start_time = time.time()
+    traj = []
+    iter = 0
+    while True:
+        iter += 1
+        B = 1
+        for i in range(n):
+            d = np.zeros(n)
+            d[i] = 1  # Unit coordinate vector along direction i
+            if f(x + delta * d) < f(x):
+                x = x + delta * d
+                B = 0
+                break
+            if f(x - delta * d) < f(x):
+                x = x - delta * d
+                B = 0
+                break
+        traj.append(f(x)-f_star)
+        if B == 1:
+            delta = 0.5 * delta  # Contract the step-length control parameter
+        if f(x) - f_star< eps:
+            return [time.time() - start_time, iter, traj]
+        if time.time() - start_time > max_time:  # Added to avoid infinite loop
+            return [time.time() - start_time, iter, traj]  # Exit if time exceeds max_time
+
+def STP(initial_theta):
+    theta = initial_theta
+    current_f = f(theta)
+    start_time = time.time()
+    traj = []
+    iter = 0
+    for t in range(1, iterations + 1):
+        iter += 1
+        st = np.random.randn(len(initial_theta))
+        theta_plus = theta + alpha_t(t) * st
+        theta_minus = theta - alpha_t(t) * st
+        f_theta = current_f
+        f_theta_plus = f(theta_plus)
+        f_theta_minus = f(theta_minus)
+        if f_theta <= min(f_theta_plus, f_theta_minus):
+            theta = theta
+            current_f = f_theta
+        elif f_theta_plus <= f_theta_minus:
+            theta = theta_plus
+            current_f = f_theta_plus
+        else:
+            theta = theta_minus
+            current_f = f_theta_minus
+        traj.append(f(theta)-f_star)
+        diff = f(theta) - f_star
+        if diff < eps:
+            return [time.time() - start_time, iter, traj]  # Return the time when condition is met
+    return [time.time() - start_time, iter, traj]  # Return the total time if condition is not met
+
+def alpha_t(t):
+    return 1 / t**0.99  
+
+np.random.seed(42)
+A = np.random.rand(dimension, dimension)
+b = np.random.rand(dimension)
+
+iterations = 1000
+delta_0 = 0.1
+eps = 0.01
+
+n_repeats = 500
+max_time = 100  # Define max_time to avoid infinite loop
+
+stp_times = []
+dds_times = []
+rgf_times = []
+
+stp_trajectories = []
+dds_trajectories = []
+rgf_trajectories = []
+
+for _ in range(n_repeats):
+    print(_)
+    initial_theta = np.random.randn(dimension)
+    stp_results = STP(initial_theta)
+    stp_times.append(stp_results[0])
+    stp_trajectories.append(stp_results[2])
+    
+    dds_results = DDS(initial_theta)
+    dds_times.append(dds_results[0])
+    dds_trajectories.append(dds_results[2])
+    
+    rgf_results = RGF(initial_theta)
+    rgf_times.append(rgf_results[0])
+    rgf_trajectories.append(rgf_results[2])
+
+# Plotting the results
+plt.figure(figsize=(18, 12))
+
+for i in range(n_repeats):
+    
+    plt.subplot(2, 3, 1)
+    plt.plot(stp_trajectories[i][:150], color=(random.random(), random.random(), random.random()), alpha=0.5)
+    plt.xlabel(r'Iteration $t$',fontsize=16)
+    plt.ylabel(r'$f(\theta^t)-f(\theta^\star)$',fontsize=16)
+    plt.title('STP Algorithm',fontsize=16)
+
+    plt.subplot(2, 3, 2)
+    plt.plot(dds_trajectories[i][:150], color=(random.random(), random.random(), random.random()), alpha=0.5)
+    plt.xlabel(r'Iteration $t$',fontsize=16)
+    plt.ylabel(r'$f(\theta^t)-f(\theta^\star)$',fontsize=16)
+    plt.title('CS Algorithm',fontsize=16)
+
+    plt.subplot(2, 3, 3)
+    plt.plot(rgf_trajectories[i][:150], color=(random.random(), random.random(), random.random()), alpha=0.5)
+    plt.xlabel(r'Iteration $t$',fontsize=16)
+    plt.ylabel(r'$f(\theta^t)-f(\theta^\star)$',fontsize=16)
+    plt.title('RGF Algorithm',fontsize=16)
+    
+plt.subplot(2, 3, 4)
+plt.hist(stp_times, bins=None, range=(min(stp_times)-0.05, max(stp_times)+0.05), color='skyblue', edgecolor='black')
+plt.xlabel('Time (s)',fontsize=16)
+plt.ylabel('Frequency',fontsize=16)
+plt.title(f'STP Algorithm\nMean Time: {np.mean(stp_times):.2f} \nStandard Deviation: {np.std(stp_times):.4f}',fontsize=14)
+
+plt.subplot(2, 3, 5)
+plt.hist(dds_times, bins=None, range=(min(dds_times)-0.05, max(dds_times)+0.05), color='salmon', edgecolor='black')
+plt.xlabel('Time (s)',fontsize=16)
+plt.ylabel('Frequency',fontsize=16)
+plt.title(f'CS Algorithm\nMean Time: {np.mean(dds_times):.2f} \nStandard Deviation: {np.std(dds_times):.4f}',fontsize=14)
+
+plt.subplot(2, 3, 6)
+plt.hist(rgf_times, bins=None, range=(min(rgf_times)-0.05, max(rgf_times)+0.05), color='lightgreen', edgecolor='black')
+plt.xlabel('Time (s)',fontsize=16)
+plt.ylabel('Frequency',fontsize=16)
+plt.title(f'RGF Algorithm\nMean Time: {np.mean(rgf_times):.2f} \nStandard Deviation: {np.std(rgf_times):.4f}',fontsize=14)
+
+plt.tight_layout()
+plt.show()
